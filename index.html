@@ -1218,10 +1218,7 @@ function resetGroup(ids){
 // ═══ PROGRESS BAR ════════════════════════════════════════════════
 function updateProgress(){
   const w = W[activeWid];
-  // Collect all (need, have) pairs across entire recipe
-  let totalNeed = 0, totalHave = 0;
-  const segments = []; // per-group progress
-
+  const miniPct = {};
   const jg=w.jigu;
   const grp4Qty = w.grp4Qty || 10;
   const grp5Qty = w.grp5Qty || 24;
@@ -1230,87 +1227,120 @@ function updateProgress(){
   const total4 = grp4Qty;
   const total5 = grp5Qty;
   const totalJigu = jg.qty;
-  const gemDirectIds = gemIdsFor(w);
-  const rm2   = rmC('grp2',total2);
-  const rm3   = rmC('grp3',total3);
-  const rm4   = rmC('grp4',total4);
-  const rm5   = rmC('grp5',total5);
-  const rmJigu= rmC('jigu',totalJigu);
-  const totalSub2 = total2*w.g2.sub.pp;
-  const totalEss = total3*5;
-  const totalFlaw = totalJigu*2;
-  const rmSub2= rmC('sub2',rm2*w.g2.sub.pp);
-  const rmEss = rmC('essence',rm3*5);
-  const rmFlaw= rmC('flaw',rmJigu*2);
   const inner = w.g2.sub.inner;
-  const totalSub2Inner = inner ? totalSub2*inner.qtyPerParent : 0;
-  const rmSub2Inner = inner ? rmC(inner.id, rmSub2*inner.qtyPerParent) : 0;
 
-  // Helper: accumulate a material
-  function acc(id, n, groupArr, totalN=n, forceDone=false){
-    if(totalN<=0) return;
-    const completedByCraft = Math.max(0,totalN-n);
-    const have = forceDone ? totalN : completedByCraft + Math.min(n, hvN(id));
-    totalNeed += totalN; totalHave += Math.min(totalN,have);
-    if(groupArr){
-      groupArr.need=(groupArr.need||0)+totalN;
-      groupArr.have=(groupArr.have||0)+Math.min(totalN,have);
-    }
+  function clamp01(v){return Math.max(0,Math.min(1,isFinite(v)?v:0));}
+  function avg(units){
+    let sum=0,weight=0;
+    units.filter(Boolean).forEach(u=>{
+      const wgt=Math.max(0,u.weight==null?1:u.weight);
+      if(wgt<=0)return;
+      sum+=clamp01(u.pct)*wgt;
+      weight+=wgt;
+    });
+    return weight>0?sum/weight:1;
   }
-  function pushSeg(seg){
-    if(seg.id && gd[seg.id] && (seg.need||0)>0){
-      totalHave += Math.max(0,seg.need-(seg.have||0));
-      seg.have = seg.need;
-    }
-    segments.push(seg);
+  function own(id,need,weight=1){
+    need=Math.max(0,parseInt(need)||0);
+    return {pct:need>0?hvN(id)/need:1,weight};
   }
+  function done(pct,weight=1){return {pct,weight};}
+  function remainingParent(id,total){
+    total=Math.max(0,parseInt(total)||0);
+    if(total<=0||gd[id])return 0;
+    return Math.max(0,total-Math.min(total,parseInt(crafted[id])||0));
+  }
+  function parent(id,total,buildUnits){
+    total=Math.max(0,parseInt(total)||0);
+    if(total<=0)return 1;
+    const rem=remainingParent(id,total);
+    if(rem<=0)return 1;
+    const made=total-rem;
+    return clamp01((made + rem*avg(buildUnits(rem)))/total);
+  }
+  function mini(id,pct){miniPct[id]=clamp01(pct);return miniPct[id];}
 
-  // Group: direct mats
-  const g0={id:'direct',name:'直接'}; 
-  acc('core',w.coreQty||4,g0); acc('ess',w.essQty||8,g0); acc('extra',w.extra.qty,g0);
-  pushSeg(g0);
+  const directPct = mini('direct',avg([
+    own('core',w.coreQty||4),
+    own('ess',w.essQty||8),
+    own('extra',w.extra.qty),
+  ]));
 
-  // Group: jigu
-  const gj={id:'jigu',name:'记忆结晶'};
-  acc(jg.gem1.id,rmJigu*jg.gem1.per,gj,totalJigu*jg.gem1.per);
-  acc(jg.gem2.id,rmJigu*jg.gem2.per,gj,totalJigu*jg.gem2.per);
-  acc('jf',rmJigu*5,gj,totalJigu*5);
-  // flaw sub
-  acc('flaw-fuse',rmFlaw*3,gj,totalFlaw*3); acc('flaw-cp',rmFlaw*30,gj,totalFlaw*30);
-  acc('flaw-td',rmFlaw*30,gj,totalFlaw*30); acc('flaw-enh',rmFlaw*10,gj,totalFlaw*10);
-  pushSeg(gj);
+  const flawTotal = remainingParent('jigu',totalJigu)*2;
+  const flawPct = mini('flaw',parent('flaw',flawTotal,rem=>[
+    own('flaw-fuse',rem*3),
+    own('flaw-cp',rem*30),
+    own('flaw-td',rem*30),
+    own('flaw-enh',rem*10),
+  ]));
+  const jiguPct = mini('jigu',parent('jigu',totalJigu,rem=>[
+    own(jg.gem1.id,rem*jg.gem1.per),
+    own(jg.gem2.id,rem*jg.gem2.per),
+    own('jf',rem*5),
+    done(flawPct),
+  ]));
 
-  // Group: g2
-  const g2={id:'grp2',name:w.g2.name.slice(0,4)};
-  acc('emblem',rm2*3,g2,total2*3); acc('g2gem2',rm2*w.g2.gem2.per,g2,total2*w.g2.gem2.per);
-  acc('mf',rm2*3,g2,total2*3);
-  if(w.g2.extraMat) acc('g2extra',rm2*w.g2.extraMat.per,g2,total2*w.g2.extraMat.per);
-  w.g2.sub.mats.forEach(m=>acc(m.id,rmSub2*m.per,g2,totalSub2*m.per));
-  if(inner) inner.mats.forEach(m=>acc(m.id,rmSub2Inner*m.per,g2,totalSub2Inner*m.per));
-  pushSeg(g2);
+  const grp2Remaining = remainingParent('grp2',total2);
+  const sub2Total = grp2Remaining*w.g2.sub.pp;
+  const innerTotal = inner ? remainingParent('sub2',sub2Total)*inner.qtyPerParent : 0;
+  const innerPct = inner ? mini(inner.id,parent(inner.id,innerTotal,rem=>
+    inner.mats.map(m=>own(m.id,rem*m.per))
+  )) : 1;
+  const sub2Pct = mini('sub2',parent('sub2',sub2Total,rem=>{
+    const units=w.g2.sub.mats.map(m=>own(m.id,rem*m.per));
+    if(inner)units.push(done(innerPct));
+    return units;
+  }));
+  const grp2Units = rem=>[
+    own('emblem',rem*3),
+    own('g2gem2',rem*w.g2.gem2.per),
+    own('mf',rem*3),
+    ...(w.g2.extraMat?[own('g2extra',rem*w.g2.extraMat.per)]:[]),
+    done(sub2Pct),
+  ];
+  const grp2Pct = mini('grp2',parent('grp2',total2,grp2Units));
 
-  // Group: g3
-  const g3={id:'grp3',name:w.g3.name.slice(0,4)};
-  acc('pureCrys',rm3*10,g3,total3*10); acc('hf',rm3*1,g3,total3*1);
-  acc('g3extra',rm3*w.g3.extraMat.per,g3,total3*w.g3.extraMat.per);
-  acc('wakeFrag',rmEss*10,g3,totalEss*10); acc('wakeCrys',rmEss*10,g3,totalEss*10);
-  acc('wakeEss',rmEss*20,g3,totalEss*20); acc('ef',rmEss*3,g3,totalEss*3); acc('ew',rmEss*10,g3,totalEss*10);
-  pushSeg(g3);
+  const grp3Remaining = remainingParent('grp3',total3);
+  const essenceTotal = grp3Remaining*5;
+  const essencePct = mini('essence',parent('essence',essenceTotal,rem=>[
+    own('wakeFrag',rem*10),
+    own('wakeCrys',rem*10),
+    own('wakeEss',rem*20),
+    own('ef',rem*3),
+    own('ew',rem*10),
+  ]));
+  const grp3Pct = mini('grp3',parent('grp3',total3,rem=>[
+    own('pureCrys',rem*10),
+    own('hf',rem*1),
+    own('g3extra',rem*w.g3.extraMat.per),
+    done(essencePct),
+  ]));
 
-  // Group: g4
-  const g4={id:'grp4',name:w.g4.name.slice(0,4)};
-  acc('g4gem1',rm4*w.g4.gem1.per,g4,total4*w.g4.gem1.per); acc('g4extra',rm4*w.g4.plainExtra.per,g4,total4*w.g4.plainExtra.per);
-  acc('mef',rm4*1,g4,total4*1); acc('g4fl',rm4*1,g4,total4*1);
-  pushSeg(g4);
+  const grp4Pct = mini('grp4',parent('grp4',total4,rem=>[
+    own('g4gem1',rem*w.g4.gem1.per),
+    own('g4extra',rem*w.g4.plainExtra.per),
+    own('mef',rem*1),
+    own('g4fl',rem*1),
+  ]));
 
-  // Group: g5
-  const g5={id:'grp5',name:w.g5.name.slice(0,4)};
-  acc('g5gem1',rm5*w.g5.gem1.per,g5,total5*w.g5.gem1.per); acc('manaStone',rm5*20,g5,total5*20);
-  acc('acp',rm5*20,g5,total5*20); acc('aw',rm5*10,g5,total5*10);
-  if(w.g5.extraMat) acc('g5extra',rm5*w.g5.extraMat.per,g5,total5*w.g5.extraMat.per);
-  pushSeg(g5);
+  const grp5Pct = mini('grp5',parent('grp5',total5,rem=>[
+    own('g5gem1',rem*w.g5.gem1.per),
+    own('manaStone',rem*20),
+    own('acp',rem*20),
+    own('aw',rem*10),
+    ...(w.g5.extraMat?[own('g5extra',rem*w.g5.extraMat.per)]:[]),
+  ]));
 
-  const pct = totalNeed > 0 ? (totalHave/totalNeed*100) : 0;
+  const segments=[
+    {id:'direct',name:'直接材料',pct:directPct,weight:1},
+    {id:'jigu',name:'记忆结晶',pct:jiguPct,weight:1},
+    {id:'grp2',name:w.g2.name,pct:grp2Pct,weight:1},
+    {id:'grp3',name:w.g3.name,pct:grp3Pct,weight:1},
+    {id:'grp4',name:w.g4.name,pct:grp4Pct,weight:1},
+    {id:'grp5',name:w.g5.name,pct:grp5Pct,weight:1},
+  ];
+
+  const pct = avg(segments)*100;
   const fill = document.getElementById('prog-fill');
   const pctEl = document.getElementById('prog-pct');
   if(fill) fill.style.width = pct + '%';
@@ -1319,21 +1349,22 @@ function updateProgress(){
   // Sub-segments
   const subsEl = document.getElementById('prog-subs');
   const COLORS=['#e03822','#f09020','#f0df38','#80d030','#38d430','#30b8a0'];
+  const COLOR_IDX={direct:0,jigu:1,flaw:1,grp2:2,sub2:2,grp3:3,essence:3,grp4:4,grp5:5};
   if(subsEl){
     subsEl.innerHTML = segments.map((seg,i)=>{
-      const sp = seg.need>0 ? ((seg.have||0)/seg.need*100) : 100;
-      const c = COLORS[i%COLORS.length];
-      return `<div class="prog-seg-wrap">
+      const sp = clamp01(seg.pct)*100;
+      const c = COLORS[(COLOR_IDX[seg.id]??i)%COLORS.length];
+      return `<div class="prog-seg-wrap" style="flex:${seg.weight}">
         <div class="prog-seg"><div class="prog-seg-fill" style="width:${sp}%;background:${c}"></div></div>
       </div>`;
     }).join('');
   }
-  segments.forEach((seg,i)=>{
-    const sp = seg.need>0 ? ((seg.have||0)/seg.need*100) : 100;
-    const fill = document.getElementById('mini-fill-'+seg.id);
+  Object.entries(miniPct).forEach(([id,p],i)=>{
+    const sp = clamp01(p)*100;
+    const fill = document.getElementById('mini-fill-'+id);
     if(fill){
       fill.style.width = sp + '%';
-      fill.style.backgroundColor = sp>=99.95 ? '#38d430' : COLORS[i%COLORS.length];
+      fill.style.backgroundColor = sp>=99.95 ? '#38d430' : COLORS[(COLOR_IDX[id]??i)%COLORS.length];
     }
   });
 }
