@@ -987,6 +987,7 @@ function loadState(){
   gd=STATES[activeWid].gd; rd=STATES[activeWid].rd;
   try{if(localStorage.getItem(ESSENCE_GEM_KEY)==='1'&&rd.wakeEss===undefined)rd.wakeEss=false;}catch(e){}
   crafted=STATES[activeWid].crafted; hv=STATES[activeWid].hv;
+  if(hv.g4fl!=null&&crafted.g4fl==null){crafted.g4fl=hv.g4fl;delete hv.g4fl;}
   try{Object.assign(icons,JSON.parse(localStorage.getItem(ICON_KEY)||'{}'));}catch(e){}
   try{styleMap=JSON.parse(localStorage.getItem(STYLE_KEY)||'{}');}catch(e){}
 }
@@ -1030,6 +1031,9 @@ function GH(id,name,cntHtml,nested=false){
   const ns=nested?'style="font-size:12px"':'';
   return `<div class="rg-hd" onclick="tg(this)"><span class="arr">▾</span>${iconSlot('mat',name,'grp-icon-slot')}<div class="rg-info"><div class="rg-name" ${ns}>${name} <span class="rg-cnt">× ${cntHtml}</span></div><div class="rg-mini" id="mini-${id}"><div class="rg-mini-track"><div class="rg-mini-fill" id="mini-fill-${id}"></div></div></div></div><div class="rg-col-src" onclick="event.stopPropagation()">已合</div><div class="rg-col-hv" onclick="event.stopPropagation()"><input class="ci" id="cr-${id}" type="number" min="0" placeholder="0"></div><div class="rg-col-lk" onclick="event.stopPropagation()"><span class="rg-rem" id="rm-${id}">?</span></div><div class="rg-col-gc"></div><div class="rg-col-ac" onclick="event.stopPropagation()"><button class="btn-gd" id="gd-${id}" onclick="toggleGD('${id}')" title="整体直购">购</button><button class="btn-reset-grp" onclick="event.stopPropagation();resetGrp('${id}')" title="归零此组">↺</button></div></div>`;
 }
+function flawRecipeHTML(id,cntHtml){
+  return `<div class="rg nested" id="rg-${id}">${GH(id,'无暇晶石',cntHtml,true)}<div class="rb" id="rb-${id}">${PR(id+'-fuse','附魔的融合剂')}${PR(id+'-cp','晶石粉末')}${PR(id+'-td','泪滴宝石')}${PR(id+'-enh','高纯度强化剂')}</div></div>`;
+}
 
 function buildWeaponHTML(w){
   let h='';
@@ -1043,7 +1047,7 @@ function buildWeaponHTML(w){
   const jg=w.jigu;
   h+=`<div class="rg" id="rg-jigu">${GH('jigu',jg.name,'<span id="cnt-jigu">${jg.qty}</span>')}<div class="rb" id="rb-jigu">${CH()}${GR(jg.gem1.id,jg.gem1.name,jg.gem1.price)}${GR(jg.gem2.id,jg.gem2.name,jg.gem2.price)}${PR('jf','附魔的融合剂')}`;
   // Flaw sub-group
-  h+=`<div class="rg nested" id="rg-flaw">${GH('flaw','无暇晶石','<span id="cnt-flaw">10</span>',true)}<div class="rb" id="rb-flaw">${PR('flaw-fuse','附魔的融合剂')}${PR('flaw-cp','晶石粉末')}${PR('flaw-td','泪滴宝石')}${PR('flaw-enh','高纯度强化剂')}</div></div>`;
+  h+=flawRecipeHTML('flaw','<span id="cnt-flaw">10</span>');
   h+=`</div></div>`;
 
   // G2 (weapon-specific)
@@ -1067,7 +1071,7 @@ function buildWeaponHTML(w){
   h+=`</div></div>`;
 
   // G4 (metal/thread)
-  h+=`<div class="rg" id="rg-grp4">${GH('grp4',w.g4.name,`<span id="cnt-grp4">${grp4Qty}</span>`)}<div class="rb" id="rb-grp4">${CH()}${GR('g4gem1',w.g4.gem1.name,w.g4.gem1.price)}${PR('g4extra',w.g4.plainExtra.name)}${PR('mef','附魔的融合剂')}${PR('g4fl','无暇晶石')}</div></div>`;
+  h+=`<div class="rg" id="rg-grp4">${GH('grp4',w.g4.name,`<span id="cnt-grp4">${grp4Qty}</span>`)}<div class="rb" id="rb-grp4">${CH()}${GR('g4gem1',w.g4.gem1.name,w.g4.gem1.price)}${PR('g4extra',w.g4.plainExtra.name)}${PR('mef','附魔的融合剂')}${flawRecipeHTML('g4fl','<span id="cnt-g4fl">0</span>')}</div></div>`;
 
   // G5 (alch/board)
   h+=`<div class="rg" id="rg-grp5">${GH('grp5',w.g5.name,`<span id="cnt-grp5">${grp5Qty}</span>`)}<div class="rb" id="rb-grp5">${CH()}${GR('g5gem1',w.g5.gem1.name,w.g5.gem1.price)}${PR('manaStone','魔力石')}${PR('acp','晶石粉末')}${PR('aw','觉醒之力粉末')}`;
@@ -1316,11 +1320,19 @@ function updateProgress(){
     done(essencePct),
   ]));
 
+  const grp4Remaining = remainingParent('grp4',total4);
+  const g4FlawTotal = grp4Remaining*1;
+  const g4FlawPct = mini('g4fl',parent('g4fl',g4FlawTotal,rem=>[
+    own('g4fl-fuse',rem*3),
+    own('g4fl-cp',rem*30),
+    own('g4fl-td',rem*30),
+    own('g4fl-enh',rem*10),
+  ]));
   const grp4Pct = mini('grp4',parent('grp4',total4,rem=>[
     own('g4gem1',rem*w.g4.gem1.per),
     own('g4extra',rem*w.g4.plainExtra.per),
     own('mef',rem*1),
-    own('g4fl',rem*1),
+    done(g4FlawPct),
   ]));
 
   const grp5Pct = mini('grp5',parent('grp5',total5,rem=>[
@@ -1349,7 +1361,7 @@ function updateProgress(){
   // Sub-segments
   const subsEl = document.getElementById('prog-subs');
   const COLORS=['#e03822','#f09020','#f0df38','#80d030','#38d430','#30b8a0'];
-  const COLOR_IDX={direct:0,jigu:1,flaw:1,grp2:2,sub2:2,grp3:3,essence:3,grp4:4,grp5:5};
+  const COLOR_IDX={direct:0,jigu:1,flaw:1,grp2:2,sub2:2,grp3:3,essence:3,grp4:4,g4fl:4,grp5:5};
   if(subsEl){
     subsEl.innerHTML = segments.map((seg,i)=>{
       const sp = clamp01(seg.pct)*100;
@@ -1382,7 +1394,8 @@ function resetGrp(grpId){
     'sub2':   [...w.g2.sub.mats.map(m=>m.id),...innerIds],
     'grp3':   ['pureCrys','hf','g3extra','wakeFrag','wakeCrys','wakeEss','ef','ew'],
     'essence':['wakeFrag','wakeCrys','wakeEss','ef','ew'],
-    'grp4':   ['g4gem1','g4extra','mef','g4fl'],
+    'grp4':   ['g4gem1','g4extra','mef','g4fl','g4fl-fuse','g4fl-cp','g4fl-td','g4fl-enh'],
+    'g4fl':   ['g4fl-fuse','g4fl-cp','g4fl-td','g4fl-enh'],
     'grp5':   ['g5gem1','manaStone','acp','aw','g5extra'],
   };
   if(inner) MAP[inner.id] = inner.mats.map(m=>m.id);
@@ -1483,6 +1496,7 @@ function calc(){
   const rmSub2  =rmG('sub2',rm2*w.g2.sub.pp);
   const rmEss   =rmG('essence',rm3*5);
   const rmFlaw  =rmG('flaw',rmJigu*2);
+  const rmG4Flaw=rmG('g4fl',rm4*1);
   const inner = w.g2.sub.inner;
   const rmSub2Inner = inner ? rmG(inner.id,rmSub2*inner.qtyPerParent) : 0;
 
@@ -1495,6 +1509,7 @@ function calc(){
   setGH('sub2',rm2*w.g2.sub.pp,rmSub2);
   setGH('essence',rm3*5,rmEss);
   setGH('flaw',rmJigu*2,rmFlaw);
+  setGH('g4fl',rm4*1,rmG4Flaw);
   if(inner) setGH(inner.id,rmSub2*inner.qtyPerParent,rmSub2Inner);
   setEl('cnt-jigu',jg.qty);
   setEl('cnt-grp2',w.grp2Qty||1);
@@ -1502,6 +1517,7 @@ function calc(){
   setEl('cnt-grp4',grp4Qty);
   setEl('cnt-grp5',grp5Qty);
   setEl('cnt-flaw',rmJigu*2);
+  setEl('cnt-g4fl',rm4*1);
   setEl('cnt-sub2',rm2*w.g2.sub.pp);
   setEl('cnt-essence',rm3*5);
   if(inner) setEl('cnt-'+inner.id,rmSub2*inner.qtyPerParent);
@@ -1539,7 +1555,10 @@ function calc(){
     ew:           rmEss*10,
     g4extra:      rm4*w.g4.plainExtra.per,
     mef:          rm4*1,
-    g4fl:         rm4*1,
+    'g4fl-fuse':  rmG4Flaw*3,
+    'g4fl-cp':    rmG4Flaw*30,
+    'g4fl-td':    rmG4Flaw*30,
+    'g4fl-enh':   rmG4Flaw*10,
     manaStone:    rm5*20,
     acp:          rm5*20,
     aw:           rm5*10,
@@ -1817,7 +1836,7 @@ const ALL_HV_IDS=()=>{
   const gemIds=['core','ess',jg2.gem1.id,jg2.gem2.id,'emblem','g2gem2','pureCrys','g4gem1','g5gem1'];
   const innerIds = w.g2.sub.inner ? w.g2.sub.inner.mats.map(m=>m.id) : [];
   const plainIds=['extra','flaw-fuse','flaw-cp','flaw-td','flaw-enh','jf','mf',
-    'g3extra','hf','wakeFrag','wakeCrys','wakeEss','ef','ew','g4extra','mef','g4fl',
+    'g3extra','hf','wakeFrag','wakeCrys','wakeEss','ef','ew','g4extra','mef','g4fl-fuse','g4fl-cp','g4fl-td','g4fl-enh',
     'manaStone','acp','aw',...w.g2.sub.mats.map(m=>m.id),
     ...innerIds,
     ...(w.g2.extraMat?['g2extra']:[]),(w.g5.extraMat?['g5extra']:[])].flat();
@@ -1825,7 +1844,7 @@ const ALL_HV_IDS=()=>{
 };
 const ALL_CR_IDS=()=>{
   const w=W[activeWid];
-  return ['jigu','grp2','grp3','grp4','grp5','sub2','essence','flaw',...(w.g2.sub.inner?[w.g2.sub.inner.id]:[])];
+  return ['jigu','grp2','grp3','grp4','grp5','sub2','essence','flaw','g4fl',...(w.g2.sub.inner?[w.g2.sub.inner.id]:[])];
 };
 
 function hook(elId,key){
