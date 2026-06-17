@@ -52,8 +52,19 @@ body::before{content:"";position:fixed;inset:0;pointer-events:none;
 .sc-k{background:rgba(56,210,48,.05);border-color:rgba(56,210,48,.18);}
 .sc-r{background:rgba(224,56,34,.05);border-color:rgba(224,56,34,.2);}
 .sc-lb{font-size:9px;letter-spacing:.04em;color:var(--muted);margin-bottom:3px;}
+.sc-note{font-size:8px;color:rgba(160,200,230,.28);line-height:1;margin:-1px 0 4px;white-space:nowrap;}
 .sc-v{font-family:"Cinzel",serif;font-size:19px;font-weight:700;}
 .sc-g .sc-v{color:var(--gem);}.sc-k .sc-v{color:var(--ok);}.sc-r .sc-v{color:var(--danger);}
+.wallet-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;margin:-6px 0 13px;padding:7px 9px;border-radius:8px;background:rgba(140,180,220,.035);border:1px solid rgba(180,220,255,.075);}
+.wallet-left{display:flex;align-items:center;gap:8px;min-width:0;}
+.wallet-label{font-size:10px;color:rgba(160,200,230,.45);white-space:nowrap;letter-spacing:.04em;}
+.wallet-input{width:98px;height:28px;border-radius:6px;border:1px solid rgba(180,220,255,.13);background:rgba(120,160,210,.07);color:#d8eaf8;text-align:center;font-size:14px;font-weight:600;outline:none;}
+.wallet-input:focus{border-color:rgba(240,220,56,.42);box-shadow:0 0 0 2px rgba(240,220,56,.08);}
+.wallet-input::placeholder{color:rgba(160,200,230,.25);}
+.wallet-result{min-height:18px;text-align:right;font-size:10px;font-weight:600;color:rgba(160,200,230,.38);white-space:nowrap;}
+.wallet-result.need{color:var(--danger);}
+.wallet-result.surplus,.wallet-result.ok{color:var(--ok);}
+.wallet-result b{font-family:"Cinzel",serif;font-size:14px;margin:0 2px;}
 
 /* Section header */
 .sec{margin-bottom:var(--sec-gap);}
@@ -233,6 +244,9 @@ body.edit-mode .eid-sel{
   .sc{padding:7px 5px;}
   .sc-lb{font-size:8px;}
   .sc-v{font-size:15px;}
+  .wallet-row{grid-template-columns:1fr;gap:5px;margin-top:-5px;}
+  .wallet-left{justify-content:space-between;}
+  .wallet-result{text-align:left;}
   /* settings: 2 cols */
   
   /* section header */
@@ -438,7 +452,14 @@ body.edit-mode .eid-sel{
 <div class="sumrow">
   <div class="sc sc-g"><div class="sc-lb" data-eid="sc-lb">计入宝珠总耗</div><div class="sc-v" id="s-total" data-eid="sc-v">6,618</div></div>
   <div class="sc sc-k"><div class="sc-lb" data-eid="sc-lb">已抵扣宝珠</div><div class="sc-v" id="s-saved" data-eid="sc-v">0</div></div>
-  <div class="sc sc-r"><div class="sc-lb" data-eid="sc-lb">仍需宝珠</div><div class="sc-v" id="s-need" data-eid="sc-v">6,618</div></div>
+  <div class="sc sc-r"><div class="sc-lb" data-eid="sc-lb">仍需宝珠</div><div class="sc-note">基于材料进度推算</div><div class="sc-v" id="s-need" data-eid="sc-v">6,618</div></div>
+</div>
+<div class="wallet-row">
+  <div class="wallet-left">
+    <span class="wallet-label">当前持有宝珠</span>
+    <input class="wallet-input" id="wallet-gems" type="number" min="0" inputmode="numeric" placeholder="0" oninput="updateWalletGems(this.value)">
+  </div>
+  <div class="wallet-result" id="wallet-result"></div>
 </div>
 
 <div class="prog-wrap">
@@ -972,7 +993,7 @@ const W = {
 };
 
 // ═══ PER-WEAPON STATE ════════════════════════════════════════════
-const STATES = Object.fromEntries(Object.keys(W).map(id=>[id,{gd:{},rd:{},crafted:{},hv:{},collapse:null}]));
+const STATES = Object.fromEntries(Object.keys(W).map(id=>[id,{gd:{},rd:{},crafted:{},hv:{},collapse:null,wallet:''}]));
 let gd,rd,crafted,hv; // refs to active weapon's state
 
 function stateKey(wid){return 'mabi-v10-'+wid;}
@@ -983,6 +1004,7 @@ function loadState(){
     STATES[activeWid].gd=s.gd||{}; STATES[activeWid].rd=s.rd||{};
     STATES[activeWid].crafted=s.crafted||{}; STATES[activeWid].hv=s.hv||{};
     STATES[activeWid].collapse=s.collapse||null;
+    STATES[activeWid].wallet=s.wallet??'';
   }catch(e){}
   gd=STATES[activeWid].gd; rd=STATES[activeWid].rd;
   try{if(localStorage.getItem(ESSENCE_GEM_KEY)==='1'&&rd.wakeEss===undefined)rd.wakeEss=false;}catch(e){}
@@ -990,11 +1012,49 @@ function loadState(){
   if(hv.g4fl!=null&&crafted.g4fl==null){crafted.g4fl=hv.g4fl;delete hv.g4fl;}
   try{Object.assign(icons,JSON.parse(localStorage.getItem(ICON_KEY)||'{}'));}catch(e){}
   try{styleMap=JSON.parse(localStorage.getItem(STYLE_KEY)||'{}');}catch(e){}
+  syncWalletInput();
 }
 function saveState(){
   try{localStorage.setItem(stateKey(activeWid),JSON.stringify(STATES[activeWid]));}catch(e){}
   const el=document.getElementById('hint');
   if(el)el.textContent='已保存 '+new Date().toLocaleTimeString();
+}
+
+function syncWalletInput(){
+  const el=document.getElementById('wallet-gems');if(!el)return;
+  const v=STATES[activeWid].wallet;
+  el.value=(v===undefined||v===null)?'':v;
+}
+function updateWalletGems(v){
+  const raw=String(v??'').trim();
+  if(raw===''){
+    STATES[activeWid].wallet='';
+  }else{
+    const parsed=Math.floor(Number(raw));
+    STATES[activeWid].wallet=Number.isFinite(parsed)?Math.max(0,parsed):'';
+  }
+  calc();
+}
+function updateWalletSummary(needG){
+  const el=document.getElementById('wallet-result');if(!el)return;
+  const raw=STATES[activeWid].wallet;
+  if(raw===''||raw===undefined||raw===null){
+    el.textContent='';
+    el.className='wallet-result';
+    return;
+  }
+  const held=Math.max(0,Math.floor(Number(raw))||0);
+  const delta=needG-held;
+  if(delta>0){
+    el.innerHTML='实际缺口：<b>'+delta.toLocaleString()+'</b>珠';
+    el.className='wallet-result need';
+  }else if(delta<0){
+    el.innerHTML='富余：<b>'+Math.abs(delta).toLocaleString()+'</b>珠';
+    el.className='wallet-result surplus';
+  }else{
+    el.textContent='刚好够用';
+    el.className='wallet-result ok';
+  }
 }
 
 function hAttr(v){
@@ -1201,12 +1261,14 @@ function doResetAll(){
   STATES[activeWid].rd={};
   STATES[activeWid].hv={};
   STATES[activeWid].crafted={};
+  STATES[activeWid].wallet='';
   gd=STATES[activeWid].gd;
   rd=STATES[activeWid].rd;
   hv=STATES[activeWid].hv;
   crafted=STATES[activeWid].crafted;
   // Clear all visible inputs
   document.querySelectorAll('.hi-in,.ci').forEach(el=>el.value='');
+  syncWalletInput();
   calc();
 }
 function resetGroup(ids){
@@ -1602,6 +1664,7 @@ function calc(){
   document.getElementById('s-total').textContent=totG.toLocaleString();
   document.getElementById('s-saved').textContent=(totG-needG).toLocaleString();
   document.getElementById('s-need').textContent=needG.toLocaleString();
+  updateWalletSummary(needG);
   saveState();
   updateProgress();
 }
