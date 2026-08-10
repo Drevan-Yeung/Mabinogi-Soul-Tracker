@@ -1,14 +1,16 @@
-# 释魂者武器制作追踪器
+# 洛奇个人工具集
 
-洛奇释魂者武器材料需求追踪器。  
+收录日常使用的洛奇规划与追踪工具。
 
 ## 在线使用
 
-[点击打开追踪器](https://drevan-yeung.github.io/Mabinogi-Soul-Tracker/)
+- [工具列表](https://drevan-yeung.github.io/Mabinogi-Soul-Tracker/tools/)
+- [释魂者武器制作追踪器](https://drevan-yeung.github.io/Mabinogi-Soul-Tracker/)
+- [装备提升清单](https://drevan-yeung.github.io/Mabinogi-Soul-Tracker/equipment-upgrade-planner/)
 
-数据保存在浏览器本地。
+数据保存在当前浏览器本地，不会自动同步到其他设备。
 
-## 使用说明
+## 释魂者武器制作追踪器
 
 - 在材料行填写“已有”数量后，工具会自动计算还差数量，并在可宝珠兑换的材料下方显示还差对应多少宝珠。
 - 可宝珠兑换的材料支持切换获取方式：`珠` 表示按宝珠兑换计入总数，`购` 表示用金币、人民币或其他方式直接购买，不计入宝珠总数。
@@ -24,4 +26,10 @@
 - 总预算会同时显示人民币和游戏币估算。
 - “存快照”可以记录当前武器的一次价格结果，方便之后对比材料涨跌。
 
-在线版本发布在 GitHub Pages，后续更新配方或图标时覆盖 `index.html` 即可。
+## 装备提升清单
+
+- 勾选完成后，条目自动移动到列表下方；未完成项目始终优先展示。
+- 默认使用深色主题，可通过页面右上角的 Light / Dark 按钮切换。
+- 金币换算比例、完成状态和筛选条件均保存在当前浏览器本地。
+
+在线版本由 GitHub Pages 自动发布。根目录保留制作追踪器，`tools/` 是统一入口，`equipment-upgrade-planner/` 存放装备提升清单。
