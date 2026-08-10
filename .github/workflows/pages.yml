@@ -36,6 +36,8 @@ jobs:
           cp index.html public/index.html
           cp .nojekyll public/.nojekyll
           cp -R assets public/assets
+          cp -R tools public/tools
+          cp -R equipment-upgrade-planner public/equipment-upgrade-planner
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
